@@ -5,10 +5,10 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use halo2_proofs::{
-        arithmetic::FieldExt,
         circuit::{Layouter, Region, SimpleFloorPlanner, Value},
         dev::MockProver,
         halo2curves::bn256::Fr,
+        halo2curves::ff::PrimeField,
         plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Selector, TableColumn},
         poly::Rotation,
     };
@@ -24,7 +24,7 @@ mod tests {
             table_col: TableColumn,
             _marker: PhantomData<F>,
         }
-        impl<F: FieldExt> LookupA<F> {
+        impl<F: PrimeField> LookupA<F> {
             fn configure(meta: &mut ConstraintSystem<F>) -> Self {
                 let x = meta.advice_column();
                 let y = meta.advice_column();
@@ -52,19 +52,18 @@ mod tests {
                 x: Value<F>,
                 y: Value<F>,
             ) -> Result<(), Error> {
-                // I think we have 6 unusable rows
-                for offset in 0..10 {
-                    self.q_enable.enable(region, offset)?;
-                    region.assign_advice(|| "x", self.x, offset, || x)?;
-                    region.assign_advice(|| "y", self.y, offset, || y)?;
-                }
+                let offset = 0;
+                self.q_enable.enable(region, offset)?;
+                region.assign_advice(|| "x", self.x, offset, || x)?;
+                region.assign_advice(|| "y", self.y, offset, || y)?;
+
                 Ok(())
             }
             fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
                 layouter.assign_table(
                     || "table",
                     |mut table| {
-                        for (offset, &value) in [1u64, 2, 3].iter().enumerate() {
+                        for (offset, &value) in [0u64, 1, 2, 3].iter().enumerate() {
                             table.assign_cell(
                                 || "table cell",
                                 self.table_col,
@@ -83,7 +82,7 @@ mod tests {
             x: Value<F>,
             y: Value<F>,
         }
-        impl<F: FieldExt> Circuit<F> for MyCircuit<F> {
+        impl<F: PrimeField> Circuit<F> for MyCircuit<F> {
             type Config = LookupA<F>;
             type FloorPlanner = SimpleFloorPlanner;
 
@@ -117,16 +116,15 @@ mod tests {
             };
             let prover = MockProver::run(k, &circuit, vec![]).unwrap();
 
-            let result = prover.verify();
             if success {
-                assert!(result.is_ok())
+                prover.assert_satisfied()
             } else {
-                assert!(result.is_err())
+                assert!(prover.verify().is_err())
             }
         }
 
-        test_circuit(3 , 4, false);
-        test_circuit(3 , 3, true);
-        test_circuit(2 , 2, true);
+        test_circuit(3, 4, false);
+        test_circuit(3, 3, true);
+        test_circuit(2, 2, true);
     }
 }
